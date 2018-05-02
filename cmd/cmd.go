@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"io"
 
+	"github.com/palantir/pkg/cobracli"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -25,7 +26,7 @@ import (
 )
 
 var (
-	RootCmd = &cobra.Command{
+	rootCmd = &cobra.Command{
 		Use:   "nobadfuncs [flags] [packages]",
 		Short: "verifies that blacklisted functions are not called",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -41,9 +42,13 @@ var (
 	configJSONFlagVal string
 )
 
+func Execute() int {
+	return cobracli.ExecuteWithDefaultParams(rootCmd)
+}
+
 func init() {
-	RootCmd.Flags().BoolVar(&printAllFlagVal, "print-all", false, "print all function references in the provided package (useful for determining format of forbidden references)")
-	RootCmd.Flags().StringVar(&configJSONFlagVal, "config-json", "", "the JSON configuration for the check")
+	rootCmd.Flags().BoolVar(&printAllFlagVal, "print-all", false, "print all function references in the provided package (useful for determining format of forbidden references)")
+	rootCmd.Flags().StringVar(&configJSONFlagVal, "config-json", "", "the JSON configuration for the check")
 }
 
 func printBadFuncRefsJSONConfig(pkgs []string, jsonConfig string, w io.Writer) error {
