@@ -23,20 +23,21 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
+	"github.com/palantir/godel/framework/godel/config"
 	"github.com/palantir/godel/framework/godellauncher"
 )
 
-func TasksConfigTask(tasksCfgInfo godellauncher.TasksConfigInfo) godellauncher.Task {
+func TasksConfigTask(tasksCfgInfo config.TasksConfigInfo) godellauncher.Task {
 	return godellauncher.CobraCLITask(&cobra.Command{
 		Use:   "tasks-config",
 		Short: "Prints the full YAML configuration used to load tasks and assets",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return printTasksCfgInfo(tasksCfgInfo, cmd.OutOrStdout())
 		},
-	})
+	}, nil)
 }
 
-func printTasksCfgInfo(tasksCfgInfo godellauncher.TasksConfigInfo, stdout io.Writer) error {
+func printTasksCfgInfo(tasksCfgInfo config.TasksConfigInfo, stdout io.Writer) error {
 	if err := printWithHeader("Built-in plugin configuration", tasksCfgInfo.BuiltinPluginsConfig, stdout); err != nil {
 		return err
 	}
@@ -47,10 +48,7 @@ func printTasksCfgInfo(tasksCfgInfo godellauncher.TasksConfigInfo, stdout io.Wri
 	}
 	fmt.Fprintln(stdout)
 
-	if err := printWithHeader("Plugin configuration for default tasks", tasksCfgInfo.DefaultTasksPluginsConfig, stdout); err != nil {
-		return err
-	}
-	return nil
+	return printWithHeader("Plugin configuration for default tasks", tasksCfgInfo.DefaultTasksPluginsConfig, stdout)
 }
 
 func printWithHeader(header string, in interface{}, stdout io.Writer) error {

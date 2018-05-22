@@ -65,7 +65,7 @@ func Update(projectDirPath string, srcPkg godelgetter.PkgSrc, stdout io.Writer) 
 
 // InstallVersion installs the specified version of gödel in the provided project directory. If targetVersion is the
 // empty string, the latest version is determined and used.
-func InstallVersion(projectDir, targetVersion string, cacheValidDuration time.Duration, newInstall bool, stdout io.Writer) error {
+func InstallVersion(projectDir, targetVersion, wantChecksum string, cacheValidDuration time.Duration, newInstall bool, stdout io.Writer) error {
 	if targetVersion == "" {
 		version, err := latestGodelVersion(cacheValidDuration)
 		if err != nil {
@@ -73,7 +73,7 @@ func InstallVersion(projectDir, targetVersion string, cacheValidDuration time.Du
 		}
 		targetVersion = version
 	}
-	pkgSrc, err := pkgSrcForVersion(targetVersion)
+	pkgSrc, err := pkgSrcForVersion(targetVersion, wantChecksum)
 	if err != nil {
 		return err
 	}
@@ -84,32 +84,27 @@ func InstallVersion(projectDir, targetVersion string, cacheValidDuration time.Du
 	} else {
 		installFn = Update
 	}
-	if err := installFn(projectDir, pkgSrc, stdout); err != nil {
-		return err
-	}
-
-	// update godel.properties with checksum
-	if checksum := pkgSrc.Checksum(); checksum != "" {
-		if err := setGodelPropertyKey(projectDir, propertiesChecksumKey, checksum); err != nil {
-			return err
-		}
-	}
-	return nil
+	return installFn(projectDir, pkgSrc, stdout)
 }
 
 // pkgSrcForVersion returns a package source for the provided version. If the distribution for the provided version has
-// been downloaded locally, the package source uses the filesystem path. Otherwise, the package source specifies the
-// Bintray download URL.
-func pkgSrcForVersion(version string) (godelgetter.PkgSrc, error) {
+// been downloaded locally (and its checksum matches the expected checksum if one is provided), the package source uses
+// the filesystem path. Otherwise, the package source specifies the Bintray download URL. Sets the provided checksum as
+// the expected checksum for the package.
+func pkgSrcForVersion(version, wantChecksum string) (godelgetter.PkgSrc, error) {
 	if version == "" {
 		return nil, errors.Errorf("version for package must be specified")
 	}
+
+	// consider distribution URL to be canonical source
+	canonicalSrcPkgPath := fmt.Sprintf("https://palantir.bintray.com/releases/com/palantir/godel/godel/%s/godel-%s.tgz", version, version)
+
 	pkgPath, checksum, err := downloadedTGZForVersion(version)
-	if err != nil {
-		pkgPath = fmt.Sprintf("https://palantir.bintray.com/releases/com/palantir/godel/godel/%s/godel-%s.tgz", version, version)
-		checksum = ""
+	if err != nil || (wantChecksum != "" && checksum != wantChecksum) {
+		// if downloaded version was not present locally, fall back on canonical source
+		pkgPath = canonicalSrcPkgPath
 	}
-	return godelgetter.NewPkgSrc(pkgPath, checksum), nil
+	return godelgetter.NewPkgSrc(pkgPath, wantChecksum, godelgetter.PkgSrcCanonicalSourceParam(canonicalSrcPkgPath)), nil
 }
 
 // downloadedTGZForVersion returns the path and checksum for the downloaded TGZ for the specified version. Returns an
@@ -147,6 +142,10 @@ func latestGodelVersion(cacheExpiration time.Duration) (string, error) {
 		return "", errors.Wrap(err, "failed to determine latest release")
 	}
 	latestVersion := *rel.TagName
+	if len(latestVersion) >= 2 && latestVersion[0] == 'v' && latestVersion[1] >= '0' && latestVersion[1] <= '9' {
+		// if version begins with 'v' and is followed by a digit, trim the leading 'v'
+		latestVersion = latestVersion[1:]
+	}
 	if err := writeLatestCachedVersion(latestVersion); err != nil {
 		return "", errors.Wrapf(err, "failed to write latest version to cache")
 	}
@@ -336,6 +335,18 @@ func update(wrapperScriptDir string, pkg godelgetter.PkgSrc, newInstall bool, st
 				return errors.Wrapf(err, "failed to copy %s to %s", syncSrcPath, syncDestPath)
 			}
 		}
+	}
+
+	// update values in godel.properties
+	canonicalSrc := pkg.CanonicalSource()
+	if canonicalSrc == "" {
+		canonicalSrc = pkg.Path()
+	}
+	if err := setGodelPropertyKey(wrapperScriptDir, propertiesURLKey, canonicalSrc); err != nil {
+		return errors.Wrap(err, "failed to update URL in godel properties file")
+	}
+	if err := setGodelPropertyKey(wrapperScriptDir, propertiesChecksumKey, pkg.Checksum()); err != nil {
+		return errors.Wrap(err, "failed to update checksum in godel properties file")
 	}
 	return nil
 }
