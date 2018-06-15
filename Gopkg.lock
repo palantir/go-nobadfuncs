@@ -19,15 +19,24 @@
   packages = [
     "dirs",
     "errorstringer",
-    "gofiles"
+    "gofiles",
   ]
   revision = "b64318170fdef93b4462420e0badef8050dbb7ec"
 
 [[projects]]
+  name = "github.com/palantir/go-nobadfuncs"
+  packages = [
+    "cmd",
+    "nobadfuncs",
+  ]
+  revision = "b4d7a2c74dac9a3ff87635ef4b1a569853febd16"
+  version = "v1.0.0"
+
+[[projects]]
   branch = "master"
   name = "github.com/palantir/godel"
-  packages = ["pkg/products"]
-  revision = "23cdea0b00851e6cbdc14f50676c43ba26b47894"
+  packages = ["pkg/products/v2/products"]
+  revision = "29049b79d8bf8de0eb67cec8e2ab1dc87fbcdbf8"
 
 [[projects]]
   branch = "master"
@@ -63,7 +72,7 @@
   name = "github.com/stretchr/testify"
   packages = [
     "assert",
-    "require"
+    "require",
   ]
   revision = "12b6f73e6084dad08a7c6e575284b177ecafbc71"
   version = "v1.2.1"
@@ -74,13 +83,13 @@
   packages = [
     "go/ast/astutil",
     "go/buildutil",
-    "go/loader"
+    "go/loader",
   ]
   revision = "059bec968c61383b574810040ba9410712de36c5"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8425f1fd3bc30b7b6bcbb2238357df9f3badef7bd0b528d3cb638508a595a171"
+  inputs-digest = "ec5897b0b1fb180dbe288bccbf8014a649ef6f0ce55e3df17461bb3f300fee30"
   solver-name = "gps-cdcl"
   solver-version = 1

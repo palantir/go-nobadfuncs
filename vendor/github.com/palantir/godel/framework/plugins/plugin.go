@@ -17,7 +17,6 @@ package plugins
 import (
 	"fmt"
 	"io"
-	"os"
 	"path"
 	"sort"
 	"strings"
@@ -27,17 +26,14 @@ import (
 	"github.com/palantir/godel/framework/artifactresolver"
 	"github.com/palantir/godel/framework/godellauncher"
 	"github.com/palantir/godel/framework/internal/pathsinternal"
-	"github.com/palantir/godel/framework/pluginapi"
+	"github.com/palantir/godel/framework/internal/pluginsinternal"
+	"github.com/palantir/godel/framework/pluginapi/v2/pluginapi"
 	"github.com/palantir/godel/pkg/osarch"
-)
-
-const (
-	indentSpaces = 4
 )
 
 // pluginInfoWithAssets bundles a pluginapi.Info with the locators of all the assets specified for it.
 type pluginInfoWithAssets struct {
-	PluginInfo pluginapi.Info
+	PluginInfo pluginapi.PluginInfo
 	Assets     []artifactresolver.Locator
 }
 
@@ -50,27 +46,28 @@ type pluginInfoWithAssets struct {
 // * Creates runnable godellauncher.Task tasks for all of the plugins.
 //
 // Returns all of the tasks provided by the plugins in the provided parameters.
-func LoadPluginsTasks(pluginsParam godellauncher.PluginsParam, stdout io.Writer) ([]godellauncher.Task, error) {
+func LoadPluginsTasks(pluginsParam godellauncher.PluginsParam, stdout io.Writer) ([]godellauncher.Task, []godellauncher.UpgradeConfigTask, error) {
 	pluginsDir, assetsDir, downloadsDir, err := pathsinternal.ResourceDirs()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	plugins, err := resolvePlugins(pluginsDir, assetsDir, downloadsDir, osarch.Current(), pluginsParam, stdout)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := verifyPluginCompatibility(plugins); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var sortedPluginLocators []artifactresolver.Locator
 	for k := range plugins {
 		sortedPluginLocators = append(sortedPluginLocators, k)
 	}
-	sortLocators(sortedPluginLocators)
+	pluginsinternal.SortLocators(sortedPluginLocators)
 
 	var tasks []godellauncher.Task
+	var upgradeConfigTasks []godellauncher.UpgradeConfigTask
 	for _, pluginLoc := range sortedPluginLocators {
 		pluginExecPath := pathsinternal.PluginPath(pluginsDir, pluginLoc)
 		pluginInfoWithAssets := plugins[pluginLoc]
@@ -80,8 +77,13 @@ func LoadPluginsTasks(pluginsParam godellauncher.PluginsParam, stdout io.Writer)
 			assetPaths = append(assetPaths, pathsinternal.PluginPath(assetsDir, assetLoc))
 		}
 		tasks = append(tasks, pluginInfoWithAssets.PluginInfo.Tasks(pluginExecPath, assetPaths)...)
+
+		upgradeConfigTask := pluginInfoWithAssets.PluginInfo.UpgradeConfigTask(pluginExecPath, assetPaths)
+		if upgradeConfigTask != nil {
+			upgradeConfigTasks = append(upgradeConfigTasks, *upgradeConfigTask)
+		}
 	}
-	return tasks, nil
+	return tasks, upgradeConfigTasks, nil
 }
 
 // resolvePlugins resolves all of the plugins defined in the provided params for the specified osArch using the provided
@@ -108,7 +110,7 @@ func resolvePlugins(pluginsDir, assetsDir, downloadsDir string, osArch osarch.OS
 	plugins := make(map[artifactresolver.Locator]pluginInfoWithAssets)
 	pluginErrors := make(map[artifactresolver.Locator]error)
 	for _, currPlugin := range pluginsParam.Plugins {
-		currPluginLocator, ok := resolveAndVerify(
+		currPluginLocator, ok := pluginsinternal.ResolveAndVerify(
 			currPlugin.LocatorWithResolverParam,
 			pluginErrors,
 			pluginsDir,
@@ -127,7 +129,7 @@ func resolvePlugins(pluginsDir, assetsDir, downloadsDir string, osArch osarch.OS
 		}
 
 		// plugin has been successfully resolved: resolve assets for plugin
-		assetInfoMap, err := resolveAssets(assetsDir, downloadsDir, currPlugin.Assets, osArch, pluginsParam, stdout)
+		assetInfoMap, err := pluginsinternal.ResolveAssets(assetsDir, downloadsDir, currPlugin.Assets, osArch, pluginsParam.DefaultResolvers, stdout)
 		if err != nil {
 			pluginErrors[currPluginLocator] = errors.Wrapf(err, "failed to get asset(s) for plugin %+v", currPluginLocator)
 			continue
@@ -148,118 +150,19 @@ func resolvePlugins(pluginsDir, assetsDir, downloadsDir string, osArch osarch.OS
 	for k := range pluginErrors {
 		sortedKeys = append(sortedKeys, k)
 	}
-	sortLocators(sortedKeys)
+	pluginsinternal.SortLocators(sortedKeys)
 
 	errStringsParts := []string{fmt.Sprintf("failed to resolve %d plugin(s):", len(pluginErrors))}
 	for _, k := range sortedKeys {
 		errStringsParts = append(errStringsParts, pluginErrors[k].Error())
 	}
-	return nil, errors.New(strings.Join(errStringsParts, "\n"+strings.Repeat(" ", indentSpaces)))
+	return nil, errors.New(strings.Join(errStringsParts, "\n"+strings.Repeat(" ", pluginsinternal.IndentSpaces)))
 }
 
-func resolveAssets(assetsDir, downloadsDir string, assetParams []artifactresolver.LocatorWithResolverParam, osArch osarch.OSArch, pluginsParam godellauncher.PluginsParam, stdout io.Writer) ([]artifactresolver.Locator, error) {
-	if len(assetParams) == 0 {
-		return nil, nil
-	}
-
-	var assets []artifactresolver.Locator
-	assetErrors := make(map[artifactresolver.Locator]error)
-	for _, currAsset := range assetParams {
-		currAssetLocator, ok := resolveAndVerify(
-			currAsset,
-			assetErrors,
-			assetsDir,
-			downloadsDir,
-			pluginsParam.DefaultResolvers,
-			osArch,
-			stdout,
-		)
-		if !ok {
-			continue
-		}
-		assets = append(assets, currAssetLocator)
-	}
-	sortLocators(assets)
-
-	if len(assetErrors) == 0 {
-		return assets, nil
-	}
-
-	// encountered errors: summarize and return
-	var sortedKeys []artifactresolver.Locator
-	for k := range assetErrors {
-		sortedKeys = append(sortedKeys, k)
-	}
-	sortLocators(sortedKeys)
-
-	errStringsParts := []string{fmt.Sprintf("failed to resolve %d asset(s):", len(assetErrors))}
-	for _, k := range sortedKeys {
-		errStringsParts = append(errStringsParts, assetErrors[k].Error())
-	}
-	return nil, errors.New(strings.Join(errStringsParts, "\n"+strings.Repeat(" ", indentSpaces)))
-}
-
-func resolveAndVerify(
-	currArtifact artifactresolver.LocatorWithResolverParam,
-	artifactErrors map[artifactresolver.Locator]error,
-	dstBaseDir, downloadsDir string,
-	defaultResolvers []artifactresolver.Resolver,
-	osArch osarch.OSArch,
-	stdout io.Writer) (currLocator artifactresolver.Locator, ok bool) {
-
-	currLocator = currArtifact.LocatorWithChecksums.Locator
-	currDstPath := path.Join(dstBaseDir, pathsinternal.PluginFileName(currLocator))
-
-	if _, err := os.Stat(currDstPath); os.IsNotExist(err) {
-		tgzDstPath := path.Join(downloadsDir, pathsinternal.PluginFileName(currLocator)+".tgz")
-		if err := artifactresolver.ResolveArtifactTGZ(currArtifact, defaultResolvers, osArch, tgzDstPath, stdout); err != nil {
-			artifactErrors[currLocator] = err
-			return currLocator, false
-		}
-
-		if err := func() (rErr error) {
-			pluginFile, err := os.OpenFile(currDstPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
-			if err != nil {
-				return errors.Wrapf(err, "failed to create file %s", currDstPath)
-			}
-			defer func() {
-				if err := pluginFile.Close(); err != nil {
-					rErr = errors.Wrapf(err, "failed to close file %s", currDstPath)
-				}
-			}()
-
-			tgzFile, err := os.Open(tgzDstPath)
-			if err != nil {
-				return errors.Wrapf(err, "failed to open %s for reading", tgzDstPath)
-			}
-
-			if err := artifactresolver.CopySingleFileTGZContent(pluginFile, tgzFile); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			artifactErrors[currLocator] = errors.Wrapf(err, "failed to extract artifact from archive into destination")
-			return currLocator, false
-		}
-	}
-
-	if wantChecksum, ok := currArtifact.LocatorWithChecksums.Checksums[osArch]; ok {
-		gotChecksum, err := artifactresolver.SHA256ChecksumFile(currDstPath)
-		if err != nil {
-			artifactErrors[currLocator] = errors.Wrapf(err, "failed to compute checksum for plugin")
-			return currLocator, false
-		}
-		if gotChecksum != wantChecksum {
-			artifactErrors[currLocator] = errors.Errorf("failed to verify checksum for %s: want %s, got %s", currDstPath, wantChecksum, gotChecksum)
-			return currLocator, false
-		}
-	}
-	return currLocator, true
-}
-
-// Verifies that the plugins in the provided map are compatible with one another. Specifically, ensures that there is at
-// most 1 version of a given plugin (a locator with a given {group, product} pair) and that there are no conflicts
-// between tasks provided by the plugins.
+// Verifies that the plugins in the provided map are compatible with one another. Specifically, ensures that:
+//   * There is at most 1 version of a given plugin (a locator with a given {group, product} pair)
+//   * There are no conflicts between tasks provided by the plugins
+//   * There are no 2 plugins that use a configuration file that have the same plugin name
 func verifyPluginCompatibility(plugins map[artifactresolver.Locator]pluginInfoWithAssets) error {
 	// map from a plugin locator to the locators to all of the plugins that they conflict with and the error that
 	// describes the conflict.
@@ -280,20 +183,20 @@ func verifyPluginCompatibility(plugins map[artifactresolver.Locator]pluginInfoWi
 	for k := range conflicts {
 		sortedOuterKeys = append(sortedOuterKeys, k)
 	}
-	sortLocators(sortedOuterKeys)
+	pluginsinternal.SortLocators(sortedOuterKeys)
 
 	errString := fmt.Sprintf("%d plugins had compatibility issues:", len(conflicts))
 	for _, k := range sortedOuterKeys {
-		errString += fmt.Sprintf("\n%s%s:", strings.Repeat(" ", indentSpaces), k.String())
+		errString += fmt.Sprintf("\n%s%s:", strings.Repeat(" ", pluginsinternal.IndentSpaces), k.String())
 
 		var sortedInnerKeys []artifactresolver.Locator
 		for innerK := range conflicts[k] {
 			sortedInnerKeys = append(sortedInnerKeys, innerK)
 		}
-		sortLocators(sortedInnerKeys)
+		pluginsinternal.SortLocators(sortedInnerKeys)
 
 		for _, innerK := range sortedInnerKeys {
-			errString += fmt.Sprintf("\n%s%s", strings.Repeat(" ", indentSpaces*2), conflicts[k][innerK].Error())
+			errString += fmt.Sprintf("\n%s%s", strings.Repeat(" ", pluginsinternal.IndentSpaces*2), conflicts[k][innerK].Error())
 		}
 	}
 	return errors.New(errString)
@@ -308,6 +211,15 @@ func verifySinglePluginCompatibility(plugin artifactresolver.Locator, plugins ma
 		if otherPlugin.Group == plugin.Group && otherPlugin.Product == plugin.Product {
 			errs[otherPlugin] = fmt.Errorf("different version of the same plugin")
 			continue
+		}
+
+		if plugin.Product == otherPlugin.Product {
+			// if product names are the same, verify that they do not both use configuration (if they do, the
+			// configuration files will conflict)
+			if plugins[plugin].PluginInfo.UsesConfig() && otherPluginInfo.PluginInfo.UsesConfig() {
+				errs[otherPlugin] = fmt.Errorf("plugins have the same product name and both use configuration (this not currently supported -- if this situation is encountered, please file an issue to flag it)")
+				continue
+			}
 		}
 
 		currPluginInfo := plugins[plugin]
@@ -335,10 +247,4 @@ func verifySinglePluginCompatibility(plugin artifactresolver.Locator, plugins ma
 		}
 	}
 	return errs
-}
-
-func sortLocators(locs []artifactresolver.Locator) {
-	sort.Slice(locs, func(i, j int) bool {
-		return locs[i].String() < locs[j].String()
-	})
 }
