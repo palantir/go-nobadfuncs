@@ -110,7 +110,7 @@ func printFuncRefUsages(pkgs []string, sigs map[string]string, stdout io.Writer)
 		if len(sigs) == 0 {
 			// "all" mode: print all references
 			visitInOrder(funcRefMap, func(pos token.Position, ref FuncRef) {
-				fmt.Fprintf(stdout, "%s: %s\n", pos.String(), ref)
+				_, _ = fmt.Fprintf(stdout, "%s: %s\n", pos.String(), ref)
 			})
 			continue
 		}
@@ -129,7 +129,7 @@ func printFuncRefUsages(pkgs []string, sigs map[string]string, stdout io.Writer)
 			if reason == "" {
 				reason = fmt.Sprintf("references to %q are not allowed. Remove this reference or whitelist it by adding a comment of the form '// OK: [reason]' to the line before it.", ref)
 			}
-			fmt.Fprintf(stdout, "%s: %s\n", pos.String(), reason)
+			_, _ = fmt.Fprintf(stdout, "%s: %s\n", pos.String(), reason)
 		})
 	}
 	return noBadRefs, nil
