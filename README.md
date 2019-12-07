@@ -1,3 +1,7 @@
+<p align="right">
+<a href="https://autorelease.general.dmz.palantir.tech/palantir/go-nobadfuncs"><img src="https://img.shields.io/badge/Perform%20an-Autorelease-success.svg" alt="Autorelease"></a>
+</p>
+
 go-nobadfuncs
 =============
 go-nobadfuncs verifies that a set of specified functions are not referenced in the packages being checked. It can be used to blacklist specific functions that should not typically be referenced or called. It is possible to explicitly allow uses of black-listed functions by adding a comment to the line before the calling line.
