@@ -18,11 +18,10 @@ import (
 	"encoding/json"
 	"io"
 
+	"github.com/palantir/go-nobadfuncs/nobadfuncs"
 	"github.com/palantir/pkg/cobracli"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-
-	"github.com/palantir/go-nobadfuncs/nobadfuncs"
 )
 
 var (

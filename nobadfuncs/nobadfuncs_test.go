@@ -26,10 +26,9 @@ import (
 
 	"github.com/nmiyake/pkg/dirs"
 	"github.com/nmiyake/pkg/gofiles"
+	"github.com/palantir/go-nobadfuncs/nobadfuncs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/palantir/go-nobadfuncs/nobadfuncs"
 )
 
 const currPkgName = "github.com/palantir/go-nobadfuncs/nobadfuncs"
