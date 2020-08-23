@@ -1,5 +1,11 @@
-type: improvement
-improvement:
-  description: Updates project to be defined as a module
-  links:
-  - https://github.com/palantir/go-nobadfuncs/pull/29
+changes:
+  - type: improvement
+    improvement:
+      description: Updates project to be defined as a module
+      links:
+      - https://github.com/palantir/go-nobadfuncs/pull/29
+  - type: improvement
+    improvement:
+      description: Adds support for running check on module projects
+      links:
+        - https://github.com/palantir/go-nobadfuncs/pull/29
