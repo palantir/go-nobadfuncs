@@ -19,24 +19,34 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/nmiyake/pkg/dirs"
 	"github.com/nmiyake/pkg/gofiles"
-	"github.com/palantir/godel/pkg/products/v2/products"
+	"github.com/palantir/godel/pkg/products/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNoBadFuncs(t *testing.T) {
+	// explicitly unset GOFLAGS environment variable during tests -- these tests perform module/package resolution and
+	// assume that vendor mode is not enabled.
+	prevValue := os.Getenv("GOFLAGS")
+	defer func() {
+		_ = os.Setenv("GOFLAGS", prevValue)
+	}()
+	err := os.Setenv("GOFLAGS", "")
+	require.NoError(t, err)
+
 	cli, err := products.Bin("go-nobadfuncs")
 	require.NoError(t, err)
 
-	wd, err := os.Getwd()
+	tmpDir, cleanup, err := dirs.TempDir("", "")
+	defer cleanup()
 	require.NoError(t, err)
 
-	tmpDir, cleanup, err := dirs.TempDir(wd, "")
-	defer cleanup()
+	wd, err := os.Getwd()
 	require.NoError(t, err)
 
 	for i, currCase := range []struct {
@@ -128,31 +138,40 @@ func MyFunction() {
 			},
 		},
 	} {
-		currCaseTmpDir, err := ioutil.TempDir(tmpDir, "")
-		require.NoError(t, err)
-
-		_, err = gofiles.Write(currCaseTmpDir, currCase.filesToCreate)
-		require.NoError(t, err, "Case %d", i)
-
-		var output []byte
-		func() {
-			err := os.Chdir(currCaseTmpDir)
-			defer func() {
-				err := os.Chdir(wd)
-				require.NoError(t, err)
-			}()
+		t.Run(currCase.name, func(t *testing.T) {
+			currCaseTmpDir, err := ioutil.TempDir(tmpDir, "")
 			require.NoError(t, err)
 
-			cmd := exec.Command(cli, currCase.args...)
-			output, err = cmd.CombinedOutput()
+			_, err = gofiles.Write(currCaseTmpDir, append(currCase.filesToCreate, gofiles.GoFileSpec{
+				RelPath: "go.mod",
+				Src:     "module github.com/palantir/go-nobadfuncs-test",
+			}))
+			require.NoError(t, err, "Case %d", i)
 
-			if currCase.expectErr {
-				require.Error(t, err, fmt.Sprintf("Case %d: %s\nOutput: %s", i, currCase.name, string(output)))
-			} else {
-				require.NoError(t, err, "Case %d: %s\nOutput: %s", i, currCase.name, string(output))
-			}
-		}()
+			var output []byte
+			func() {
+				err := os.Chdir(currCaseTmpDir)
+				defer func() {
+					err := os.Chdir(wd)
+					require.NoError(t, err)
+				}()
+				require.NoError(t, err)
 
-		assert.Equal(t, currCase.wantStdout(currCaseTmpDir), string(output), "Case %d: %s\nOutput:\n%s", i, currCase.name, string(output))
+				cmd := exec.Command(cli, currCase.args...)
+				output, err = cmd.CombinedOutput()
+
+				if currCase.expectErr {
+					require.Error(t, err, fmt.Sprintf("Case %d: %s\nOutput: %s", i, currCase.name, string(output)))
+				} else {
+					require.NoError(t, err, "Case %d: %s\nOutput: %s", i, currCase.name, string(output))
+				}
+			}()
+
+			// make expected dir location canonical
+			currCaseTmpDir, err = filepath.EvalSymlinks(currCaseTmpDir)
+			require.NoError(t, err)
+
+			assert.Equal(t, currCase.wantStdout(currCaseTmpDir), string(output), "Case %d: %s\nOutput:\n%s", i, currCase.name, string(output))
+		})
 	}
 }

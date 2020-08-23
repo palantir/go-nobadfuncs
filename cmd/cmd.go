@@ -17,6 +17,7 @@ package cmd
 import (
 	"encoding/json"
 	"io"
+	"os"
 
 	"github.com/palantir/go-nobadfuncs/nobadfuncs"
 	"github.com/palantir/pkg/cobracli"
@@ -29,11 +30,16 @@ var (
 		Use:   "nobadfuncs [flags] [packages]",
 		Short: "verifies that blacklisted functions are not called",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
+			if err != nil {
+				return errors.Wrapf(err, "failed to determine working directory")
+			}
+
 			if printAllFlagVal {
 				// if print-all flag is specified, perform print all action
-				return nobadfuncs.PrintAllFuncRefs(args, cmd.OutOrStdout())
+				return nobadfuncs.PrintAllFuncRefs(args, wd, cmd.OutOrStdout())
 			}
-			return printBadFuncRefsJSONConfig(args, configJSONFlagVal, cmd.OutOrStdout())
+			return printBadFuncRefsJSONConfig(args, configJSONFlagVal, wd, cmd.OutOrStdout())
 		},
 	}
 
@@ -50,12 +56,12 @@ func init() {
 	rootCmd.Flags().StringVar(&configJSONFlagVal, "config-json", "", "the JSON configuration for the check")
 }
 
-func printBadFuncRefsJSONConfig(pkgs []string, jsonConfig string, w io.Writer) error {
+func printBadFuncRefsJSONConfig(pkgs []string, jsonConfig string, dir string, w io.Writer) error {
 	var sigs map[string]string
 	if jsonConfig != "" {
 		if err := json.Unmarshal([]byte(jsonConfig), &sigs); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal configuration as JSON: %q", jsonConfig)
 		}
 	}
-	return nobadfuncs.PrintBadFuncRefs(pkgs, sigs, w)
+	return nobadfuncs.PrintBadFuncRefs(pkgs, sigs, dir, w)
 }

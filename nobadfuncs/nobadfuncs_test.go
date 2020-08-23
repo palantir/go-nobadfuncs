@@ -20,25 +20,23 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"sort"
 	"strings"
 	"testing"
 
-	"github.com/nmiyake/pkg/dirs"
 	"github.com/nmiyake/pkg/gofiles"
 	"github.com/palantir/go-nobadfuncs/nobadfuncs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const currPkgName = "github.com/palantir/go-nobadfuncs/nobadfuncs"
-
 func TestPrintFuncRefUsages(t *testing.T) {
-	wd, err := os.Getwd()
-	require.NoError(t, err)
-
-	tmpDir, cleanup, err := dirs.TempDir(".", "")
-	defer cleanup()
+	// during test, explicitly enable "-mod=vendor" so that vendor dependencies can be tested.
+	// Tests do not use any non-vendored module dependencies so it is OK to set.
+	prevValue := os.Getenv("GOFLAGS")
+	defer func() {
+		_ = os.Setenv("GOFLAGS", prevValue)
+	}()
+	err := os.Setenv("GOFLAGS", "-mod=vendor")
 	require.NoError(t, err)
 
 	for i, currCase := range []struct {
@@ -84,7 +82,7 @@ func MyFunction() {
 				"func (*net/http.Client).Do(*net/http.Request) (*net/http.Response, error)": "",
 			},
 			want: func(testDir string) string {
-				return fmt.Sprintf("%s:9:21: references to \"func (*net/http.Client).Do(*net/http.Request) (*net/http.Response, error)\" are not allowed. Remove this reference or whitelist it by adding a comment of the form '// OK: [reason]' to the line before it.\n", path.Join(wd, testDir, "foo/foo.go"))
+				return fmt.Sprintf("%s:9:21: references to \"func (*net/http.Client).Do(*net/http.Request) (*net/http.Response, error)\" are not allowed. Remove this reference or whitelist it by adding a comment of the form '// OK: [reason]' to the line before it.\n", path.Join(testDir, "foo/foo.go"))
 			},
 		},
 		{
@@ -117,7 +115,7 @@ func Bar() {}
 				"func github.com/bar.Bar()": "",
 			},
 			want: func(testDir string) string {
-				return fmt.Sprintf("%s:9:6: references to \"func github.com/bar.Bar()\" are not allowed. Remove this reference or whitelist it by adding a comment of the form '// OK: [reason]' to the line before it.\n", path.Join(wd, testDir, "foo/foo.go"))
+				return fmt.Sprintf("%s:9:6: references to \"func github.com/bar.Bar()\" are not allowed. Remove this reference or whitelist it by adding a comment of the form '// OK: [reason]' to the line before it.\n", path.Join(testDir, "foo/foo.go"))
 			},
 		},
 		{
@@ -142,7 +140,7 @@ func MyFunction() {
 				"func (*net/http.Client).Do(*net/http.Request) (*net/http.Response, error)": "TEST: don't use this please",
 			},
 			want: func(testDir string) string {
-				return fmt.Sprintf("%s:9:21: TEST: don't use this please\n", path.Join(wd, testDir, "foo/foo.go"))
+				return fmt.Sprintf("%s:9:21: TEST: don't use this please\n", path.Join(testDir, "foo/foo.go"))
 			},
 		},
 		{
@@ -211,9 +209,9 @@ func TypeAlias() {
 			},
 			want: func(testDir string) string {
 				return strings.Join([]string{
-					fmt.Sprintf("%s:9:30: No", path.Join(wd, testDir, "foo/foo.go")),
-					fmt.Sprintf("%s:19:11: No", path.Join(wd, testDir, "foo/foo.go")),
-					fmt.Sprintf("%s:26:21: No", path.Join(wd, testDir, "foo/foo.go")),
+					fmt.Sprintf("%s:9:30: No", path.Join(testDir, "foo/foo.go")),
+					fmt.Sprintf("%s:19:11: No", path.Join(testDir, "foo/foo.go")),
+					fmt.Sprintf("%s:26:21: No", path.Join(testDir, "foo/foo.go")),
 				}, "\n") + "\n"
 			},
 		},
@@ -254,42 +252,39 @@ func Foo2() {
 			},
 			want: func(testDir string) string {
 				return strings.Join([]string{
-					fmt.Sprintf("%s:9:21: No", path.Join(wd, testDir, "foo/foo.go")),
-					fmt.Sprintf("%s:9:21: No", path.Join(wd, testDir, "foo/foo2.go")),
+					fmt.Sprintf("%s:9:21: No", path.Join(testDir, "foo/foo.go")),
+					fmt.Sprintf("%s:9:21: No", path.Join(testDir, "foo/foo2.go")),
 				}, "\n") + "\n"
 			},
 		},
 	} {
-		projectDir, err := ioutil.TempDir(tmpDir, fmt.Sprintf("case-%d-", i))
-		require.NoError(t, err)
+		t.Run(currCase.name, func(t *testing.T) {
+			projectDir, err := ioutil.TempDir("", fmt.Sprintf("case-%d-", i))
+			require.NoError(t, err)
 
-		_, err = gofiles.Write(projectDir, currCase.specs)
-		require.NoError(t, err, "Case %d: %s", i, currCase.name)
+			_, err = gofiles.Write(projectDir, append(currCase.specs, gofiles.GoFileSpec{
+				RelPath: "go.mod",
+				Src:     "module github.com/palantir/go-nobadfuncs-test",
+			}))
+			require.NoError(t, err, "Case %d: %s", i, currCase.name)
 
-		pkgs := make(map[string]struct{})
-		for _, spec := range currCase.specs {
-			pkgName := "./" + path.Join(projectDir, path.Dir(spec.RelPath))
-			pkgs[pkgName] = struct{}{}
-		}
-		var sortedPkgs []string
-		for pkg := range pkgs {
-			sortedPkgs = append(sortedPkgs, pkg)
-		}
-		sort.Strings(sortedPkgs)
+			var got bytes.Buffer
+			// ignore return value since some cases will have errors (verifying output is sufficient)
+			_ = nobadfuncs.PrintBadFuncRefs([]string{"./..."}, currCase.sigs, projectDir, &got)
 
-		var got bytes.Buffer
-		_ = nobadfuncs.PrintBadFuncRefs(sortedPkgs, currCase.sigs, &got)
-
-		assert.Equal(t, currCase.want(projectDir), got.String(), "Case %d: %s\nOutput:\n%s", i, currCase.name, got.String())
+			assert.Equal(t, currCase.want(projectDir), got.String(), "Case %d: %s\nOutput:\n%s", i, currCase.name, got.String())
+		})
 	}
 }
 
 func TestPrintAllFuncRefs(t *testing.T) {
-	wd, err := os.Getwd()
-	require.NoError(t, err)
-
-	tmpDir, cleanup, err := dirs.TempDir(".", "")
-	defer cleanup()
+	// during test, explicitly enable "-mod=vendor" so that vendor dependencies can be tested.
+	// Tests do not use any non-vendored module dependencies so it is OK to set.
+	prevValue := os.Getenv("GOFLAGS")
+	defer func() {
+		_ = os.Setenv("GOFLAGS", prevValue)
+	}()
+	err := os.Setenv("GOFLAGS", "-mod=vendor")
 	require.NoError(t, err)
 
 	for i, currCase := range []struct {
@@ -322,9 +317,9 @@ func MyFunction() {
 			},
 			want: func(testDir string) string {
 				return strings.Join([]string{
-					fmt.Sprintf("%s:10:21: func (*net/http.Client).Do(*net/http.Request) (*net/http.Response, error)", path.Join(wd, testDir, "foo/foo.go")),
-					fmt.Sprintf("%s:11:21: func (*net/http.Client).PostForm(string, net/url.Values) (*net/http.Response, error)", path.Join(wd, testDir, "foo/foo.go")),
-					fmt.Sprintf("%s:14:6: func fmt.Println(...interface{}) (int, error)", path.Join(wd, testDir, "foo/foo.go")),
+					fmt.Sprintf("%s:10:21: func (*net/http.Client).Do(*net/http.Request) (*net/http.Response, error)", path.Join(testDir, "foo/foo.go")),
+					fmt.Sprintf("%s:11:21: func (*net/http.Client).PostForm(string, net/url.Values) (*net/http.Response, error)", path.Join(testDir, "foo/foo.go")),
+					fmt.Sprintf("%s:14:6: func fmt.Println(...interface{}) (int, error)", path.Join(testDir, "foo/foo.go")),
 				}, "\n") + "\n"
 			},
 		},
@@ -365,8 +360,8 @@ func (b BarType) Bar(in BarType) BarType {
 			},
 			want: func(testDir string) string {
 				return strings.Join([]string{
-					fmt.Sprintf("%s:10:4: func (github.com/bar.BarType).Bar(github.com/bar.BarType) github.com/bar.BarType", path.Join(wd, testDir, "foo/foo.go")),
-					fmt.Sprintf("%s:12:6: func github.com/bar.FreeBar()", path.Join(wd, testDir, "foo/foo.go")),
+					fmt.Sprintf("%s:10:4: func (github.com/bar.BarType).Bar(github.com/bar.BarType) github.com/bar.BarType", path.Join(testDir, "foo/foo.go")),
+					fmt.Sprintf("%s:12:6: func github.com/bar.FreeBar()", path.Join(testDir, "foo/foo.go")),
 				}, "\n") + "\n"
 			},
 		},
@@ -395,7 +390,7 @@ func LexEnter(l *Lexer) StateFn {
 				},
 			},
 			want: func(testDir string) string {
-				return fmt.Sprintf("%s:11:9: func %s/%s/foo.LexEnter(*%s/%s/foo.Lexer) %s/%s/foo.StateFn", path.Join(wd, testDir, "foo/foo.go"), currPkgName, testDir, currPkgName, testDir, currPkgName, testDir) + "\n"
+				return fmt.Sprintf("%s:11:9: func github.com/palantir/go-nobadfuncs-test/foo.LexEnter(*github.com/palantir/go-nobadfuncs-test/foo.Lexer) github.com/palantir/go-nobadfuncs-test/foo.StateFn", path.Join(testDir, "foo/foo.go")) + "\n"
 			},
 		},
 		{
@@ -418,7 +413,7 @@ func Foo() {
 `,
 				},
 				{
-					RelPath: "foo/vendor/github.com/bar/bar.go",
+					RelPath: "vendor/github.com/bar/bar.go",
 					Src: `
 package bar
 
@@ -440,34 +435,27 @@ func LexEnter(l *Lexer) StateFn {
 			},
 			want: func(testDir string) string {
 				return strings.Join([]string{
-					fmt.Sprintf("%s:9:6: func github.com/bar.LexText(*github.com/bar.Lexer) github.com/bar.StateFn", path.Join(wd, testDir, "foo/foo.go")),
-					fmt.Sprintf("%s:10:12: func github.com/bar.LexEnter(*github.com/bar.Lexer) github.com/bar.StateFn", path.Join(wd, testDir, "foo/foo.go")),
-					fmt.Sprintf("%s:11:9: func github.com/bar.LexEnter(*github.com/bar.Lexer) github.com/bar.StateFn", path.Join(wd, testDir, "foo/vendor/github.com/bar/bar.go")),
+					fmt.Sprintf("%s:9:6: func github.com/bar.LexText(*github.com/bar.Lexer) github.com/bar.StateFn", path.Join(testDir, "foo/foo.go")),
+					fmt.Sprintf("%s:10:12: func github.com/bar.LexEnter(*github.com/bar.Lexer) github.com/bar.StateFn", path.Join(testDir, "foo/foo.go")),
 				}, "\n") + "\n"
 			},
 		},
 	} {
-		projectDir, err := ioutil.TempDir(tmpDir, fmt.Sprintf("case-%d-", i))
-		require.NoError(t, err)
+		t.Run(currCase.name, func(t *testing.T) {
+			projectDir, err := ioutil.TempDir("", fmt.Sprintf("case-%d-", i))
+			require.NoError(t, err)
 
-		_, err = gofiles.Write(projectDir, currCase.specs)
-		require.NoError(t, err, "Case %d: %s", i, currCase.name)
+			_, err = gofiles.Write(projectDir, append(currCase.specs, gofiles.GoFileSpec{
+				RelPath: "go.mod",
+				Src:     "module github.com/palantir/go-nobadfuncs-test",
+			}))
+			require.NoError(t, err, "Case %d: %s", i, currCase.name)
 
-		pkgs := make(map[string]struct{})
-		for _, spec := range currCase.specs {
-			pkgName := "./" + path.Join(projectDir, path.Dir(spec.RelPath))
-			pkgs[pkgName] = struct{}{}
-		}
-		var sortedPkgs []string
-		for pkg := range pkgs {
-			sortedPkgs = append(sortedPkgs, pkg)
-		}
-		sort.Strings(sortedPkgs)
+			var got bytes.Buffer
+			err = nobadfuncs.PrintAllFuncRefs([]string{"./..."}, projectDir, &got)
+			require.NoError(t, err, "Case %d: %s", i, currCase.name)
 
-		var got bytes.Buffer
-		err = nobadfuncs.PrintAllFuncRefs(sortedPkgs, &got)
-		require.NoError(t, err, "Case %d: %s", i, currCase.name)
-
-		assert.Equal(t, currCase.want(projectDir), got.String(), "Case %d: %s\nOutput:\n%s", i, currCase.name, got.String())
+			assert.Equal(t, currCase.want(projectDir), got.String(), "Case %d: %s\nOutput:\n%s", i, currCase.name, got.String())
+		})
 	}
 }

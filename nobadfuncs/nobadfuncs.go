@@ -17,18 +17,14 @@ package nobadfuncs
 import (
 	"fmt"
 	"go/ast"
-	"go/build"
-	"go/parser"
 	"go/token"
 	"go/types"
 	"io"
-	"os"
-	"path"
 	"regexp"
 	"sort"
 
 	"github.com/pkg/errors"
-	"golang.org/x/tools/go/loader"
+	"golang.org/x/tools/go/packages"
 )
 
 // FuncRef is a reference to a specific function. Matches the string representation of *types.Func, which is of the
@@ -36,15 +32,15 @@ import (
 type FuncRef string
 
 // PrintAllFuncRefs prints all of the function references in the provided packages.
-func PrintAllFuncRefs(pkgs []string, w io.Writer) error {
-	_, err := printFuncRefUsages(pkgs, nil, w)
+func PrintAllFuncRefs(pkgs []string, dir string, w io.Writer) error {
+	_, err := printFuncRefUsages(pkgs, nil, dir, w)
 	return err
 }
 
 // PrintBadFuncRefs prints the "bad" function references (the function references that match those provided in sigs).
 // Returns an error if the check fails or if any bad references are found.
-func PrintBadFuncRefs(pkgs []string, sigs map[string]string, w io.Writer) error {
-	ok, err := printBadFuncRefsHelper(pkgs, sigs, w)
+func PrintBadFuncRefs(pkgs []string, sigs map[string]string, dir string, w io.Writer) error {
+	ok, err := printBadFuncRefsHelper(pkgs, sigs, dir, w)
 	if err != nil {
 		return err
 	}
@@ -54,59 +50,26 @@ func PrintBadFuncRefs(pkgs []string, sigs map[string]string, w io.Writer) error 
 	return nil
 }
 
-func printBadFuncRefsHelper(pkgs []string, sigs map[string]string, w io.Writer) (bool, error) {
+func printBadFuncRefsHelper(pkgs []string, sigs map[string]string, dir string, w io.Writer) (bool, error) {
 	if len(sigs) == 0 {
 		// if there are no signatures, there will be no output
 		return true, nil
 	}
-	return printFuncRefUsages(pkgs, sigs, w)
+	return printFuncRefUsages(pkgs, sigs, dir, w)
 }
 
-func printFuncRefUsages(pkgs []string, sigs map[string]string, stdout io.Writer) (bool, error) {
-	loadcfg := loader.Config{
-		Build:      &build.Default,
-		ParserMode: parser.ParseComments,
-	}
-
-	loadcfg.TypeChecker.Error = func(e error) {
-		// TODO: should we print instead?
-		//fmt.Fprintln(w, e.Error())
-	}
-
-	// add all packages to load
-	_, err := loadcfg.FromArgs(pkgs, true)
+func printFuncRefUsages(pkgs []string, sigs map[string]string, dir string, stdout io.Writer) (bool, error) {
+	loadedPkgs, err := packages.Load(&packages.Config{
+		Mode: packages.LoadAllSyntax,
+		Dir:  dir,
+	}, pkgs...)
 	if err != nil {
 		return false, errors.Wrapf(err, "failed to load packages")
 	}
 
-	// load program
-	prog, err := loadcfg.Load()
-	if err != nil {
-		return false, errors.Wrapf(err, "failed to load program")
-	}
-	sort.Strings(pkgs)
-
-	inputPkgToImportPath := make(map[string]string)
-	wd, err := os.Getwd()
-	if err != nil {
-		return false, errors.Wrapf(err, "failed to determine working directory")
-	}
-	for _, pkg := range pkgs {
-		importedPkg, _ := build.ImportDir(path.Join(wd, pkg), 0)
-		inputPkgToImportPath[pkg] = importedPkg.ImportPath
-	}
-
 	noBadRefs := true
-	for _, currPkg := range pkgs {
-		// translate package to import path
-		currPkgImportPath := inputPkgToImportPath[currPkg]
-
-		info := prog.Package(currPkgImportPath)
-		if info == nil {
-			panic(fmt.Sprintf("failed to find %s in %v; imported %v", currPkgImportPath, prog.AllPackages, prog.Imported))
-		}
-
-		funcRefMap := filePosFuncRefMap(info.Uses, prog.Fset, sigs)
+	for _, loadedPkg := range loadedPkgs {
+		funcRefMap := filePosFuncRefMap(loadedPkg.TypesInfo.Uses, loadedPkg.Fset, sigs)
 		if len(sigs) == 0 {
 			// "all" mode: print all references
 			visitInOrder(funcRefMap, func(pos token.Position, ref FuncRef) {
@@ -115,7 +78,7 @@ func printFuncRefUsages(pkgs []string, sigs map[string]string, stdout io.Writer)
 			continue
 		}
 
-		commentMap := fileLineCommentMap(prog.Fset, info.Files)
+		commentMap := fileLineCommentMap(loadedPkg.Fset, loadedPkg.Syntax)
 
 		// filter out any matches that have a whitelist comment
 		filterFuncRefs(funcRefMap, commentMap, okCommentRegxp.MatchString)
