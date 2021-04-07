@@ -1,6 +1,6 @@
 module github.com/palantir/go-nobadfuncs
 
-go 1.15
+go 1.16
 
 require (
 	github.com/nmiyake/pkg/dirs v1.0.2
@@ -10,5 +10,5 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/cobra v1.1.1
 	github.com/stretchr/testify v1.4.0
-	golang.org/x/tools v0.0.0-20200822203824-307de81be3f4
+	golang.org/x/tools v0.1.0
 )
