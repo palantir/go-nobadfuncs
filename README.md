@@ -17,4 +17,7 @@ func (*net/http.Client).Do(*net/http.Request) (*net/http.Response, error)
 func fmt.Println(...interface{}) (int, error)
 ```
 
-go-nobadfuncs can be run with the `--all` flag to print all of the function references in the provided packages. The output can be used as the basis for determining the signatures for blacklist functions.
+go-nobadfuncs can be run with the following flags:
+
+* `--print-all` flag to print all of the function references in the provided packages. The output can be used as the basis for determining the signatures for blacklist functions.
+* `--config-json` flag to run with the JSON configuration for the check
