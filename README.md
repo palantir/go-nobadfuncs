@@ -4,7 +4,7 @@
 
 go-nobadfuncs
 =============
-go-nobadfuncs verifies that a set of specified functions are not referenced in the packages being checked. It can be used to blacklist specific functions that should not typically be referenced or called. It is possible to explicitly allow uses of black-listed functions by adding a comment to the line before the calling line.
+go-nobadfuncs verifies that a set of specified functions are not referenced in the packages being checked. It can be used to deny specific functions that should not typically be referenced or called. It is possible to explicitly allow uses of deny-listed functions by adding a comment to the line before the calling line.
 
 Usage
 -----
