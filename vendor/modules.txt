@@ -2,6 +2,8 @@
 github.com/davecgh/go-spew/spew
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
+# github.com/kr/pretty v0.2.0
+## explicit
 # github.com/nmiyake/pkg v1.0.0
 github.com/nmiyake/pkg
 # github.com/nmiyake/pkg/dirs v1.0.2
@@ -25,7 +27,7 @@ github.com/palantir/pkg/cobracli
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
-# github.com/spf13/cobra v1.3.0
+# github.com/spf13/cobra v1.4.0
 ## explicit
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5
@@ -35,8 +37,10 @@ github.com/spf13/pflag
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
 # golang.org/x/mod v0.5.0
+## explicit
 golang.org/x/mod/semver
 # golang.org/x/sys v0.0.0-20211205182925-97ca703d548d
+## explicit
 golang.org/x/sys/execabs
 # golang.org/x/tools v0.1.5
 ## explicit
@@ -54,5 +58,8 @@ golang.org/x/tools/internal/typesinternal
 # golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 golang.org/x/xerrors
 golang.org/x/xerrors/internal
+# gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15
+## explicit
 # gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+## explicit
 gopkg.in/yaml.v3
