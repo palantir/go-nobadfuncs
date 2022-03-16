@@ -7,10 +7,10 @@ require (
 	github.com/nmiyake/pkg/dirs v1.0.2
 	github.com/nmiyake/pkg/gofiles v1.0.2
 	github.com/palantir/godel/pkg/products/v2 v2.0.0
-	github.com/palantir/pkg/cobracli v1.0.1
+	github.com/palantir/pkg/cobracli v1.1.0
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/cobra v1.4.0
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 	golang.org/x/mod v0.5.0 // indirect
 	golang.org/x/sys v0.0.0-20211205182925-97ca703d548d // indirect
 	golang.org/x/tools v0.1.5
