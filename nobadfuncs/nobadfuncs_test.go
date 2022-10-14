@@ -319,7 +319,7 @@ func MyFunction() {
 				return strings.Join([]string{
 					fmt.Sprintf("%s:10:21: func (*net/http.Client).Do(*net/http.Request) (*net/http.Response, error)", path.Join(testDir, "foo/foo.go")),
 					fmt.Sprintf("%s:11:21: func (*net/http.Client).PostForm(string, net/url.Values) (*net/http.Response, error)", path.Join(testDir, "foo/foo.go")),
-					fmt.Sprintf("%s:14:6: func fmt.Println(...interface{}) (int, error)", path.Join(testDir, "foo/foo.go")),
+					fmt.Sprintf("%s:14:6: func fmt.Println(...any) (int, error)", path.Join(testDir, "foo/foo.go")),
 				}, "\n") + "\n"
 			},
 		},
