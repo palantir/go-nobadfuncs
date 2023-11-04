@@ -8,7 +8,7 @@ require (
 	github.com/palantir/godel/pkg/products/v2 v2.0.0
 	github.com/palantir/pkg/cobracli v1.2.0
 	github.com/pkg/errors v0.8.1
-	github.com/spf13/cobra v1.7.0
+	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/tools v0.14.0
 )
