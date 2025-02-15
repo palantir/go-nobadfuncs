@@ -10,9 +10,9 @@ require (
 	github.com/palantir/godel/pkg/products/v2 v2.0.0
 	github.com/palantir/pkg/cobracli v1.2.0
 	github.com/pkg/errors v0.8.1
-	github.com/spf13/cobra v1.8.1
+	github.com/spf13/cobra v1.9.0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/tools v0.29.0
+	golang.org/x/tools v0.30.0
 )
 
 require (
@@ -24,8 +24,8 @@ require (
 	github.com/palantir/pkg v1.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
-	golang.org/x/mod v0.22.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/mod v0.23.0 // indirect
+	golang.org/x/sync v0.11.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
