@@ -17,6 +17,7 @@ package nobadfuncs
 import (
 	"fmt"
 	"go/types"
+	"slices"
 	"strings"
 )
 
@@ -77,6 +78,10 @@ func toTypeRemoveVendor(in types.Type) types.Type {
 	switch typ := in.(type) {
 	default:
 		panic(fmt.Errorf("unrecognized type: %v", in))
+	case *types.Alias:
+		return in
+	case *types.TypeParam:
+		return in
 	case *types.Basic:
 		return in
 	case *types.Array:
@@ -90,7 +95,13 @@ func toTypeRemoveVendor(in types.Type) types.Type {
 	case *types.Tuple:
 		return newTupleRemoveVendor(typ)
 	case *types.Signature:
-		return types.NewSignature(newVarRemoveVendor(typ.Recv()), newTupleRemoveVendor(typ.Params()), newTupleRemoveVendor(typ.Results()), typ.Variadic())
+		getTypeParams := func(in *types.TypeParamList) []*types.TypeParam {
+			if in == nil {
+				return nil
+			}
+			return slices.Collect(in.TypeParams())
+		}
+		return types.NewSignatureType(newVarRemoveVendor(typ.Recv()), getTypeParams(typ.RecvTypeParams()), getTypeParams(typ.TypeParams()), newTupleRemoveVendor(typ.Params()), newTupleRemoveVendor(typ.Results()), typ.Variadic())
 	case *types.Interface:
 		return in
 	case *types.Map:
