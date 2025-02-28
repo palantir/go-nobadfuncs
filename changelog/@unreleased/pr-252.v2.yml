@@ -1,0 +1,6 @@
+type: improvement
+improvement:
+  description: Fixes issue where check could panic if code under analysis used alias
+    types or other new language constructs.
+  links:
+  - https://github.com/palantir/go-nobadfuncs/pull/252
