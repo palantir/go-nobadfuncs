@@ -17,7 +17,6 @@ package nobadfuncs_test
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -259,7 +258,7 @@ func Foo2() {
 		},
 	} {
 		t.Run(currCase.name, func(t *testing.T) {
-			projectDir, err := ioutil.TempDir("", fmt.Sprintf("case-%d-", i))
+			projectDir, err := os.MkdirTemp("", fmt.Sprintf("case-%d-", i))
 			require.NoError(t, err)
 
 			_, err = gofiles.Write(projectDir, append(currCase.specs, gofiles.GoFileSpec{
@@ -442,7 +441,7 @@ func LexEnter(l *Lexer) StateFn {
 		},
 	} {
 		t.Run(currCase.name, func(t *testing.T) {
-			projectDir, err := ioutil.TempDir("", fmt.Sprintf("case-%d-", i))
+			projectDir, err := os.MkdirTemp("", fmt.Sprintf("case-%d-", i))
 			require.NoError(t, err)
 
 			_, err = gofiles.Write(projectDir, append(currCase.specs, gofiles.GoFileSpec{
