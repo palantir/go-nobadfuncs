@@ -16,7 +16,6 @@ package integration_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -139,7 +138,7 @@ func MyFunction() {
 		},
 	} {
 		t.Run(currCase.name, func(t *testing.T) {
-			currCaseTmpDir, err := ioutil.TempDir(tmpDir, "")
+			currCaseTmpDir, err := os.MkdirTemp(tmpDir, "")
 			require.NoError(t, err)
 
 			_, err = gofiles.Write(currCaseTmpDir, append(currCase.filesToCreate, gofiles.GoFileSpec{

@@ -36,7 +36,7 @@ func toFuncWithNoIdentifiersRemoveVendor(in *types.Func) *types.Func {
 	if !ok {
 		return in
 	}
-	newSig := types.NewSignature(newVarNoName(sig.Recv()), newTupleNoNames(sig.Params()), newTupleNoNames(sig.Results()), sig.Variadic())
+	newSig := types.NewSignatureType(newVarNoName(sig.Recv()), nil, nil, newTupleNoNames(sig.Params()), newTupleNoNames(sig.Results()), sig.Variadic())
 	newSig = toTypeRemoveVendor(newSig).(*types.Signature)
 	return types.NewFunc(in.Pos(), pkgNoVendor(in.Pkg()), in.Name(), newSig)
 }
