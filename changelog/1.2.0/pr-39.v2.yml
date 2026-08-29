@@ -1,5 +1,0 @@
-type: improvement
-improvement:
-  description: Update golang.org/x/tools dependency to v0.1.0
-  links:
-  - https://github.com/palantir/go-nobadfuncs/pull/39
